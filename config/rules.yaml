@@ -1,0 +1,78 @@
+# Audit Rules Configuration
+# Defines rules for code auditing
+
+rules:
+  pattern_compliance:
+    enabled: true
+    severity: warning
+    patterns:
+      - id: PC001
+        name: repository_pattern
+        description: Use Repository pattern for data access
+        enabled: true
+
+      - id: PC002
+        name: dependency_injection
+        description: Use dependency injection for dependencies
+        enabled: true
+
+      - id: PC003
+        name: single_responsibility
+        description: Classes should have single responsibility
+        enabled: true
+
+  antipattern_detection:
+    enabled: true
+    severity: error
+    patterns:
+      - id: AP001
+        name: missing_docstring
+        description: All modules, classes, and functions should have docstrings
+        enabled: true
+
+      - id: AP002
+        name: multiple_imports
+        description: Each import should be on its own line
+        enabled: true
+
+      - id: AP003
+        name: too_many_parameters
+        description: Functions should not have more than 5 parameters
+        max_params: 5
+        enabled: true
+
+      - id: AP004
+        name: magic_numbers
+        description: Avoid magic numbers, use named constants
+        enabled: true
+
+      - id: AP005
+        name: god_class
+        description: Classes should not be too large
+        max_methods: 20
+        max_lines: 500
+        enabled: true
+
+  security:
+    enabled: true
+    severity: error
+    rules:
+      - id: SEC001
+        name: command_injection
+        description: Prevent command injection vulnerabilities
+        enabled: true
+
+      - id: SEC002
+        name: sql_injection
+        description: Prevent SQL injection vulnerabilities
+        enabled: true
+
+      - id: SEC003
+        name: path_traversal
+        description: Prevent path traversal vulnerabilities
+        enabled: true
+
+      - id: SEC004
+        name: hardcoded_credentials
+        description: No hardcoded passwords or secrets
+        enabled: true

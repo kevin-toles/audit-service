@@ -1,0 +1,36 @@
+# audit-service Docker Compose
+# Development and testing configuration
+
+services:
+  audit-service:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      target: development
+    container_name: audit-service
+    ports:
+      - "8084:8084"
+    environment:
+      - AUDIT_DEBUG=true
+      - AUDIT_LOG_LEVEL=DEBUG
+      - AUDIT_LOG_FORMAT=text
+      - AUDIT_LLM_GATEWAY_URL=http://llm-gateway:8081
+      - AUDIT_SEMANTIC_SEARCH_URL=http://semantic-search:8082
+      - AUDIT_AI_PLATFORM_DATA_URL=http://ai-platform-data:8083
+    volumes:
+      - ../../src:/app/src:ro
+      - ../../config:/app/config:ro
+      - ../../tests:/app/tests:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - kitchen-brigade
+
+networks:
+  kitchen-brigade:
+    name: kitchen-brigade
+    external: true

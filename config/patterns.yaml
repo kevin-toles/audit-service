@@ -1,0 +1,71 @@
+# Coding Patterns Configuration
+# Reference patterns from authoritative sources
+
+patterns:
+  # Domain-Driven Design patterns
+  ddd:
+    - id: DDD001
+      name: aggregate_root
+      description: Use Aggregate Roots for consistency boundaries
+      reference: "Evans, Domain-Driven Design, Chapter 6"
+
+    - id: DDD002
+      name: repository
+      description: Use Repository pattern for aggregate persistence
+      reference: "Evans, Domain-Driven Design, Chapter 6"
+
+    - id: DDD003
+      name: value_object
+      description: Use Value Objects for descriptive elements without identity
+      reference: "Evans, Domain-Driven Design, Chapter 5"
+
+  # Architecture Patterns with Python
+  architecture:
+    - id: ARCH001
+      name: ports_adapters
+      description: Implement Ports and Adapters (Hexagonal) architecture
+      reference: "Percival & Gregory, Architecture Patterns with Python, Chapter 2"
+
+    - id: ARCH002
+      name: unit_of_work
+      description: Use Unit of Work for transaction management
+      reference: "Percival & Gregory, Architecture Patterns with Python, Chapter 6"
+
+    - id: ARCH003
+      name: service_layer
+      description: Use Service Layer for use case orchestration
+      reference: "Percival & Gregory, Architecture Patterns with Python, Chapter 4"
+
+  # Clean Code principles
+  clean_code:
+    - id: CC001
+      name: single_responsibility
+      description: Functions and classes should do one thing
+      reference: "Martin, Clean Code, Chapter 3"
+
+    - id: CC002
+      name: meaningful_names
+      description: Use intention-revealing names
+      reference: "Martin, Clean Code, Chapter 2"
+
+    - id: CC003
+      name: small_functions
+      description: Functions should be small (< 20 lines)
+      reference: "Martin, Clean Code, Chapter 3"
+
+  # Python-specific patterns
+  python:
+    - id: PY001
+      name: type_hints
+      description: Use type hints for function signatures
+      reference: "PEP 484"
+
+    - id: PY002
+      name: async_await
+      description: Use async/await for I/O-bound operations
+      reference: "PEP 492"
+
+    - id: PY003
+      name: context_managers
+      description: Use context managers for resource management
+      reference: "PEP 343"

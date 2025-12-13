@@ -1,0 +1,62 @@
+# audit-service Kubernetes Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: audit-service
+  labels:
+    app: audit-service
+    tier: backend
+    role: auditor
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: audit-service
+  template:
+    metadata:
+      labels:
+        app: audit-service
+        tier: backend
+        role: auditor
+    spec:
+      containers:
+        - name: audit-service
+          image: audit-service:latest
+          ports:
+            - containerPort: 8084
+              protocol: TCP
+          env:
+            - name: AUDIT_LOG_LEVEL
+              value: "INFO"
+            - name: AUDIT_LOG_FORMAT
+              value: "json"
+            - name: AUDIT_LLM_GATEWAY_URL
+              value: "http://llm-gateway:8081"
+            - name: AUDIT_SEMANTIC_SEARCH_URL
+              value: "http://semantic-search:8082"
+            - name: AUDIT_AI_PLATFORM_DATA_URL
+              value: "http://ai-platform-data:8083"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8084
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 8084
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      restartPolicy: Always

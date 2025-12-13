@@ -1,0 +1,73 @@
+{
+  "clean_code_audit": {
+    "passed": true,
+    "findings": [],
+    "summary": {
+      "error": 0,
+      "warning": 0,
+      "info": 0
+    }
+  },
+  "antipattern_audit": {
+    "passed": false,
+    "findings": [
+      {
+        "rule_id": "AP001",
+        "severity": "warning",
+        "message": "Missing module docstring",
+        "line": 1
+      },
+      {
+        "rule_id": "AP002",
+        "severity": "warning",
+        "message": "Multiple imports on single line",
+        "line": 2
+      },
+      {
+        "rule_id": "AP003",
+        "severity": "error",
+        "message": "Function has too many parameters (8 > 5)",
+        "line": 4
+      },
+      {
+        "rule_id": "AP004",
+        "severity": "error",
+        "message": "Magic number detected",
+        "line": 14
+      }
+    ],
+    "summary": {
+      "error": 2,
+      "warning": 2,
+      "info": 0
+    }
+  },
+  "security_audit": {
+    "passed": false,
+    "findings": [
+      {
+        "rule_id": "SEC001",
+        "severity": "error",
+        "message": "Command injection vulnerability - os.system with user input",
+        "line": 9
+      },
+      {
+        "rule_id": "SEC002",
+        "severity": "error",
+        "message": "SQL injection vulnerability - string interpolation in query",
+        "line": 14
+      },
+      {
+        "rule_id": "SEC003",
+        "severity": "error",
+        "message": "Path traversal vulnerability - unsanitized file path",
+        "line": 19
+      }
+    ],
+    "summary": {
+      "error": 3,
+      "warning": 0,
+      "info": 0
+    }
+  }
+}
