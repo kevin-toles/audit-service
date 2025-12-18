@@ -252,3 +252,114 @@ class TestEndpointErrorHandling:
         response = client.post(_ENDPOINT_URL, json=request)
         assert response.status_code == 422
 
+
+# =============================================================================
+# AC-5.4.4: Status Field in Response Tests
+# =============================================================================
+
+
+class TestEndpointStatusField:
+    """Tests for status field in audit response."""
+
+    def test_response_has_status_field(self, client: TestClient) -> None:
+        """AC-5.4.4: Response contains status field."""
+        response = client.post(_ENDPOINT_URL, json=_SAMPLE_AUDIT_REQUEST)
+        data = response.json()
+        assert "status" in data
+
+    def test_passing_audit_has_verified_status(self, client: TestClient) -> None:
+        """AC-5.4.4: Passing audit returns verified status."""
+        response = client.post(_ENDPOINT_URL, json=_SAMPLE_AUDIT_REQUEST)
+        data = response.json()
+        
+        assert data["passed"] is True
+        assert data["status"] == "verified"
+
+    def test_failing_audit_has_suspicious_status(self, client: TestClient) -> None:
+        """AC-5.4.4: Failing audit returns suspicious status."""
+        request = {
+            "code": "completely_different_code_xyz_123",
+            "references": [
+                {
+                    "chapter_id": "ch1",
+                    "title": "Test",
+                    "content": "```python\ndef something_else(): pass\n```",
+                }
+            ],
+            "threshold": 0.99,
+        }
+        response = client.post(_ENDPOINT_URL, json=request)
+        data = response.json()
+        
+        assert data["passed"] is False
+        assert data["status"] == "suspicious"
+
+    def test_response_model_has_status_type(self) -> None:
+        """AC-5.4.4: Response model supports status type."""
+        from src.api.models import CrossReferenceAuditResponse
+
+        response = CrossReferenceAuditResponse(
+            passed=True,
+            status="verified",
+            findings=[],
+            best_similarity=0.9,
+        )
+        assert response.status == "verified"
+
+    def test_status_must_be_valid_value(self) -> None:
+        """AC-5.4.4: Status must be verified/suspicious/false_positive."""
+        from pydantic import ValidationError
+        from src.api.models import CrossReferenceAuditResponse
+
+        with pytest.raises(ValidationError):
+            CrossReferenceAuditResponse(
+                passed=True,
+                status="invalid_status",  # type: ignore
+                findings=[],
+                best_similarity=0.9,
+            )
+
+
+# =============================================================================
+# AC-5.4.3: Theory→Implementation in Response Tests
+# =============================================================================
+
+
+class TestEndpointTheoryImplementation:
+    """Tests for theory→implementation count in response."""
+
+    def test_response_has_theory_impl_count(self, client: TestClient) -> None:
+        """AC-5.4.3: Response contains theory_impl_count field."""
+        response = client.post(_ENDPOINT_URL, json=_SAMPLE_AUDIT_REQUEST)
+        data = response.json()
+        assert "theory_impl_count" in data
+
+    def test_theory_impl_count_is_integer(self, client: TestClient) -> None:
+        """AC-5.4.3: theory_impl_count is an integer."""
+        response = client.post(_ENDPOINT_URL, json=_SAMPLE_AUDIT_REQUEST)
+        data = response.json()
+        assert isinstance(data["theory_impl_count"], int)
+
+    def test_response_model_has_theory_impl_count(self) -> None:
+        """AC-5.4.3: Response model has theory_impl_count field."""
+        from src.api.models import CrossReferenceAuditResponse
+
+        response = CrossReferenceAuditResponse(
+            passed=True,
+            findings=[],
+            best_similarity=0.9,
+            theory_impl_count=2,
+        )
+        assert response.theory_impl_count == 2
+
+    def test_theory_impl_count_defaults_to_zero(self) -> None:
+        """AC-5.4.3: theory_impl_count defaults to 0."""
+        from src.api.models import CrossReferenceAuditResponse
+
+        response = CrossReferenceAuditResponse(
+            passed=True,
+            findings=[],
+            best_similarity=0.9,
+        )
+        assert response.theory_impl_count == 0
+

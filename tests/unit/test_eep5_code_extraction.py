@@ -486,3 +486,154 @@ class TestBatchCodeExtraction:
         assert results["ch1"] == []
         assert len(results["ch2"]) == 1
 
+
+# =============================================================================
+# AC-5.1.2: Inline Code Extraction Tests
+# =============================================================================
+
+
+class TestInlineCodeExtraction:
+    """Tests for extracting inline code (backtick-delimited)."""
+
+    def test_extract_inline_code_method_exists(self) -> None:
+        """extract_inline_code() method exists."""
+        from src.extractors.code_extractor import CodeExtractor
+
+        extractor = CodeExtractor()
+        assert hasattr(extractor, "extract_inline_code")
+        assert callable(extractor.extract_inline_code)
+
+    def test_extract_single_inline_code(self) -> None:
+        """AC-5.1.2: Extracts single inline code block."""
+        from src.extractors.code_extractor import CodeExtractor
+
+        extractor = CodeExtractor()
+        content = "Use the `print()` function to display output."
+        inline_codes = extractor.extract_inline_code(content)
+
+        assert len(inline_codes) == 1
+        assert inline_codes[0].code == "print()"
+
+    def test_extract_multiple_inline_codes(self) -> None:
+        """AC-5.1.2: Extracts multiple inline code blocks."""
+        from src.extractors.code_extractor import CodeExtractor
+
+        extractor = CodeExtractor()
+        content = "Use `def` to define functions and `class` for classes."
+        inline_codes = extractor.extract_inline_code(content)
+
+        assert len(inline_codes) == 2
+        assert inline_codes[0].code == "def"
+        assert inline_codes[1].code == "class"
+
+    def test_inline_code_has_line_number(self) -> None:
+        """AC-5.1.2: Inline code includes line number."""
+        from src.extractors.code_extractor import CodeExtractor
+
+        extractor = CodeExtractor()
+        content = "Line 1\nLine 2 with `code`\nLine 3"
+        inline_codes = extractor.extract_inline_code(content)
+
+        assert len(inline_codes) == 1
+        assert inline_codes[0].line == 2
+
+    def test_inline_code_has_column_position(self) -> None:
+        """AC-5.1.2: Inline code includes column position."""
+        from src.extractors.code_extractor import CodeExtractor
+
+        extractor = CodeExtractor()
+        content = "Start with `code` here"
+        inline_codes = extractor.extract_inline_code(content)
+
+        assert len(inline_codes) == 1
+        assert inline_codes[0].column == 11  # Position of backtick
+
+    def test_inline_code_skips_fenced_blocks(self) -> None:
+        """AC-5.1.2: Inline extraction skips content inside fenced blocks."""
+        from src.extractors.code_extractor import CodeExtractor
+
+        extractor = CodeExtractor()
+        content = '''Before `inline1`
+
+```python
+# Not inline: `this should be ignored`
+```
+
+After `inline2`'''
+        inline_codes = extractor.extract_inline_code(content)
+
+        assert len(inline_codes) == 2
+        codes = [ic.code for ic in inline_codes]
+        assert "inline1" in codes
+        assert "inline2" in codes
+        assert "this should be ignored" not in codes
+
+    def test_inline_code_empty_content(self) -> None:
+        """AC-5.1.2: Returns empty list for empty content."""
+        from src.extractors.code_extractor import CodeExtractor
+
+        extractor = CodeExtractor()
+        inline_codes = extractor.extract_inline_code("")
+
+        assert inline_codes == []
+
+    def test_extract_all_code_method_exists(self) -> None:
+        """extract_all_code() method exists for combined extraction."""
+        from src.extractors.code_extractor import CodeExtractor
+
+        extractor = CodeExtractor()
+        assert hasattr(extractor, "extract_all_code")
+        assert callable(extractor.extract_all_code)
+
+    def test_extract_all_code_includes_fenced_and_inline(self) -> None:
+        """AC-5.1.2: extract_all_code returns both fenced and inline."""
+        from src.extractors.code_extractor import CodeExtractor
+
+        extractor = CodeExtractor()
+        content = '''Use `inline_func()` here.
+
+```python
+def fenced_func():
+    pass
+```
+'''
+        all_code = extractor.extract_all_code(content)
+
+        # Should have both fenced (1) and inline (1) = 2 total
+        assert len(all_code) >= 2
+        has_fenced = any(not b.is_inline for b in all_code)
+        has_inline = any(b.is_inline for b in all_code)
+        assert has_fenced
+        assert has_inline
+
+    def test_extract_all_code_can_exclude_inline(self) -> None:
+        """AC-5.1.2: extract_all_code can exclude inline with flag."""
+        from src.extractors.code_extractor import CodeExtractor
+
+        extractor = CodeExtractor()
+        content = '''Use `inline_func()` here.
+
+```python
+def fenced_func():
+    pass
+```
+'''
+        all_code = extractor.extract_all_code(content, include_inline=False)
+
+        # Should only have fenced blocks
+        assert len(all_code) == 1
+        assert all(not b.is_inline for b in all_code)
+
+    def test_inline_code_index_tracking(self) -> None:
+        """AC-5.1.2: Inline code has correct index."""
+        from src.extractors.code_extractor import CodeExtractor
+
+        extractor = CodeExtractor()
+        content = "First `a` then `b` then `c`"
+        inline_codes = extractor.extract_inline_code(content)
+
+        assert len(inline_codes) == 3
+        assert inline_codes[0].index == 0
+        assert inline_codes[1].index == 1
+        assert inline_codes[2].index == 2
+

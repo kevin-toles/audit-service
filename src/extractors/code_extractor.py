@@ -54,10 +54,27 @@ _CODE_FENCE_PATTERN = re.compile(
     re.MULTILINE,
 )
 
+# AC-5.1.2: Inline code pattern - matches `code` (single backtick delimited)
+_INLINE_CODE_PATTERN = re.compile(
+    r"(?<!`)``?(?!`)([^`]+)``?(?!`)",  # Matches `code` or ``code`` but not ```
+)
+
 
 # =============================================================================
 # Pydantic Models
 # =============================================================================
+
+
+class InlineCode(BaseModel):
+    """AC-5.1.2: Extracted inline code with metadata.
+
+    Represents code delimited by single backticks: `code`
+    """
+
+    code: str = Field(description="Raw inline code content")
+    line: int = Field(ge=1, description="Line number (1-indexed)")
+    column: int = Field(ge=0, description="Column position in line")
+    index: int = Field(ge=0, description="Inline code index within document")
 
 
 class CodeBlock(BaseModel):
@@ -73,6 +90,7 @@ class CodeBlock(BaseModel):
     index: int = Field(ge=0, description="Block index within document")
     context_before: str = Field(default="", description="Text before code block")
     context_after: str = Field(default="", description="Text after code block")
+    is_inline: bool = Field(default=False, description="Whether this is inline code")
 
 
 # =============================================================================
@@ -272,3 +290,95 @@ class CodeExtractor:
         end = min(total, closing_fence_idx + 1 + _CONTEXT_LINES)
         context_lines = lines[closing_fence_idx + 1 : end]
         return "\n".join(context_lines).strip()
+
+    def extract_inline_code(
+        self,
+        content: str,
+    ) -> list[InlineCode]:
+        """AC-5.1.2: Extract inline code blocks from markdown.
+
+        Inline code is delimited by single backticks: `code`
+
+        Args:
+            content: Markdown content to parse
+
+        Returns:
+            List of InlineCode objects in order of appearance
+        """
+        if not content or not content.strip():
+            return []
+
+        inline_codes: list[InlineCode] = []
+        lines = content.split("\n")
+        inline_index = 0
+        in_code_block = False
+
+        for line_num, line in enumerate(lines, start=1):
+            # Skip lines inside fenced code blocks
+            if line.strip().startswith("```"):
+                in_code_block = not in_code_block
+                continue
+
+            if in_code_block:
+                continue
+
+            # Find all inline code in this line
+            for match in _INLINE_CODE_PATTERN.finditer(line):
+                code = match.group(1).strip()
+                if code:  # Skip empty inline code
+                    inline_codes.append(
+                        InlineCode(
+                            code=code,
+                            line=line_num,
+                            column=match.start(),
+                            index=inline_index,
+                        )
+                    )
+                    inline_index += 1
+
+        return inline_codes
+
+    def extract_all_code(
+        self,
+        content: str,
+        language_filter: str | None = None,
+        include_inline: bool = True,
+    ) -> list[CodeBlock]:
+        """AC-5.1.2: Extract both fenced and inline code blocks.
+
+        Combines fenced code blocks and inline code into a unified list.
+
+        Args:
+            content: Markdown content to parse
+            language_filter: Optional language filter for fenced blocks
+            include_inline: Whether to include inline code (default True)
+
+        Returns:
+            List of CodeBlock objects, inline code marked with is_inline=True
+        """
+        # Get fenced code blocks
+        blocks = self.extract_code_blocks(content, language_filter)
+
+        if not include_inline:
+            return blocks
+
+        # Get inline code and convert to CodeBlock format
+        inline_codes = self.extract_inline_code(content)
+        current_index = len(blocks)
+
+        for inline in inline_codes:
+            blocks.append(
+                CodeBlock(
+                    code=inline.code,
+                    language=_UNKNOWN_LANGUAGE,
+                    start_line=inline.line,
+                    end_line=inline.line,
+                    index=current_index,
+                    context_before="",
+                    context_after="",
+                    is_inline=True,
+                )
+            )
+            current_index += 1
+
+        return blocks

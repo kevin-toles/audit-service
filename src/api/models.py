@@ -12,7 +12,7 @@ Anti-Patterns Avoided:
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -22,6 +22,9 @@ from pydantic import BaseModel, Field
 # =============================================================================
 
 _DEFAULT_THRESHOLD = 0.5
+
+# AC-5.4.4: Status literal type
+AuditStatusType = Literal["verified", "suspicious", "false_positive"]
 
 
 # =============================================================================
@@ -73,6 +76,10 @@ class CrossReferenceAuditResponse(BaseModel):
     """
 
     passed: bool = Field(description="Whether the audit passed")
+    status: AuditStatusType = Field(
+        default="suspicious",
+        description="AC-5.4.4: Audit status (verified/suspicious/false_positive)",
+    )
     findings: list[dict[str, Any]] = Field(
         default_factory=list,
         description="List of findings with similarity scores",
@@ -85,4 +92,8 @@ class CrossReferenceAuditResponse(BaseModel):
     threshold: float = Field(
         default=_DEFAULT_THRESHOLD,
         description="Threshold used for audit",
+    )
+    theory_impl_count: int = Field(
+        default=0,
+        description="AC-5.4.3: Number of theory→implementation relationships detected",
     )

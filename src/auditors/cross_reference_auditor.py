@@ -22,9 +22,10 @@ Anti-Patterns Avoided:
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
-from src.auditors.base import AuditResult, BaseAuditor
+from src.auditors.base import AuditResult, AuditStatus, BaseAuditor
 from src.embedders.codebert_embedder import FakeCodeBERTEmbedder
 from src.extractors.code_extractor import CodeExtractor
 from src.scoring.code_similarity import CodeSimilarityScorer
@@ -40,6 +41,46 @@ _AUDITOR_DESCRIPTION = (
     "similarity scoring. Verifies that code aligns with documented patterns."
 )
 _DEFAULT_THRESHOLD = 0.5
+
+# AC-5.4.3: Theory→Implementation detection patterns
+# Keywords that indicate theoretical/conceptual content
+_THEORY_KEYWORDS = [
+    "algorithm",
+    "concept",
+    "theory",
+    "principle",
+    "pattern",
+    "approach",
+    "strategy",
+    "method",
+    "technique",
+    "best practice",
+    "design",
+    "architecture",
+]
+
+# Keywords that indicate implementation/practical content
+_IMPLEMENTATION_KEYWORDS = [
+    "def ",
+    "class ",
+    "function",
+    "import ",
+    "from ",
+    "return ",
+    "async def",
+    "await ",
+    "self.",
+    "raise ",
+    "try:",
+    "except:",
+]
+
+# Regex pattern for detecting theory→implementation relationships
+_THEORY_IMPL_PATTERN = re.compile(
+    r"(?:implement(?:s|ing|ation)?|based on|following|using|apply(?:ing)?)\s+"
+    r"(?:the\s+)?(?:above|this|that|previous|described|mentioned)",
+    re.IGNORECASE,
+)
 
 
 # =============================================================================
@@ -113,6 +154,8 @@ class CrossReferenceAuditor(BaseAuditor):
 
         # Extract code blocks from all references
         all_reference_codes: list[dict[str, Any]] = []
+        theory_impl_relationships: list[dict[str, Any]] = []
+
         for ref in references:
             chapter_id = ref.get("chapter_id", "unknown")
             title = ref.get("title", "")
@@ -120,12 +163,25 @@ class CrossReferenceAuditor(BaseAuditor):
 
             blocks = self._extractor.extract_code_blocks(content, language_filter="python")
             for block in blocks:
+                # AC-5.4.3: Detect theory→implementation relationships
+                is_theory_impl = self._detect_theory_impl_relationship(
+                    block.context_before, block.code
+                )
+                
                 all_reference_codes.append({
                     "chapter_id": chapter_id,
                     "title": title,
                     "code": block.code,
                     "start_line": block.start_line,
+                    "is_theory_impl": is_theory_impl,
                 })
+                
+                if is_theory_impl:
+                    theory_impl_relationships.append({
+                        "chapter_id": chapter_id,
+                        "context": block.context_before[:100] + "..." if len(block.context_before) > 100 else block.context_before,
+                        "start_line": block.start_line,
+                    })
 
         # No code blocks in references
         if not all_reference_codes:
@@ -148,6 +204,7 @@ class CrossReferenceAuditor(BaseAuditor):
                 "matched_chapter": ref_code["chapter_id"],
                 "score": similarity,
                 "confidence": similarity,
+                "is_theory_impl": ref_code.get("is_theory_impl", False),
                 "reference": {
                     "chapter_id": ref_code["chapter_id"],
                     "start_line": ref_code["start_line"],
@@ -161,8 +218,12 @@ class CrossReferenceAuditor(BaseAuditor):
         # Sort findings by similarity descending
         findings.sort(key=lambda x: x["similarity"], reverse=True)
 
-        # Determine if audit passes
+        # AC-5.4.4: Determine status based on similarity
         passed = best_similarity >= threshold
+        if passed:
+            status = AuditStatus.VERIFIED
+        else:
+            status = AuditStatus.SUSPICIOUS
 
         return AuditResult(
             passed=passed,
@@ -173,7 +234,10 @@ class CrossReferenceAuditor(BaseAuditor):
                 "best_similarity": best_similarity,
                 "code_similarity_score": best_similarity,
                 "reference_count": len(all_reference_codes),
+                "theory_impl_count": len(theory_impl_relationships),
+                "theory_impl_references": theory_impl_relationships,
             },
+            status=status,
         )
 
     def _create_failure_result(
@@ -199,4 +263,67 @@ class CrossReferenceAuditor(BaseAuditor):
                 "code_similarity_score": 0.0,
                 "error": reason,
             },
+            status=AuditStatus.SUSPICIOUS,
         )
+
+    def _detect_theory_impl_relationship(
+        self, context: str, code: str
+    ) -> bool:
+        """AC-5.4.3: Detect if code implements theoretical concepts.
+
+        Analyzes context before code block and code itself to determine
+        if this represents a theory→implementation relationship.
+
+        Args:
+            context: Text before the code block
+            code: The code content
+
+        Returns:
+            True if this appears to be theory→implementation
+        """
+        # Check context for theory keywords
+        context_lower = context.lower()
+        has_theory_context = any(
+            keyword in context_lower for keyword in _THEORY_KEYWORDS
+        )
+
+        # Check code for implementation patterns
+        has_impl_code = any(
+            keyword in code for keyword in _IMPLEMENTATION_KEYWORDS
+        )
+
+        # Check for explicit relationship indicators
+        has_explicit_relationship = bool(_THEORY_IMPL_PATTERN.search(context))
+
+        # Theory→impl if context has theory keywords and code has impl patterns
+        # OR if there's explicit relationship language
+        return (has_theory_context and has_impl_code) or has_explicit_relationship
+
+    def detect_theory_implementation(
+        self, content: str
+    ) -> list[dict[str, Any]]:
+        """AC-5.4.3: Public method to detect theory→implementation relationships.
+
+        Scans content for code blocks that implement theoretical concepts.
+
+        Args:
+            content: Markdown content to analyze
+
+        Returns:
+            List of detected theory→implementation relationships
+        """
+        relationships: list[dict[str, Any]] = []
+        blocks = self._extractor.extract_code_blocks(content)
+
+        for block in blocks:
+            if self._detect_theory_impl_relationship(block.context_before, block.code):
+                relationships.append({
+                    "start_line": block.start_line,
+                    "end_line": block.end_line,
+                    "language": block.language,
+                    "context_summary": block.context_before[:200] if block.context_before else "",
+                    "code_preview": block.code[:100] + "..." if len(block.code) > 100 else block.code,
+                    "relationship_type": "theory_to_implementation",
+                })
+
+        return relationships

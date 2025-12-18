@@ -49,9 +49,11 @@ async def audit_cross_reference(
 
     return CrossReferenceAuditResponse(
         passed=result.passed,
+        status=result.status.value,  # AC-5.4.4: Include status enum
         findings=result.findings,
         best_similarity=result.metadata.get("best_similarity", 0.0),
         threshold=request.threshold,
+        theory_impl_count=result.metadata.get("theory_impl_count", 0),  # AC-5.4.3
     )
 
 
