@@ -83,8 +83,10 @@ def create_app() -> FastAPI:
 
     # Register routers
     app.include_router(health_router)
-    # TODO: Register audit and checkpoint routers in Phase 6
-    # app.include_router(audit_router)
+    # EEP-5.5: Register audit router
+    from src.api.routes.audit import router as audit_router
+    app.include_router(audit_router)
+    # TODO: Register checkpoint router in Phase 6
     # app.include_router(checkpoint_router)
 
     return app
