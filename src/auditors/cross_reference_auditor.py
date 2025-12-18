@@ -23,12 +23,14 @@ Anti-Patterns Avoided:
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.auditors.base import AuditResult, AuditStatus, BaseAuditor
-from src.embedders.codebert_embedder import FakeCodeBERTEmbedder
 from src.extractors.code_extractor import CodeExtractor
 from src.scoring.code_similarity import CodeSimilarityScorer
+
+if TYPE_CHECKING:
+    from src.clients.codebert_client import CodeBERTClientProtocol
 
 
 # =============================================================================
@@ -96,6 +98,9 @@ class CrossReferenceAuditor(BaseAuditor):
 
     Pattern: Inherits from BaseAuditor (AC-5.4.1)
 
+    AC-5.2.1: Accepts CodeBERTClientProtocol for dependency injection.
+    Uses FakeCodeBERTClient by default for testability.
+
     Usage:
         auditor = CrossReferenceAuditor()
         result = await auditor.audit(generated_code, {
@@ -106,11 +111,24 @@ class CrossReferenceAuditor(BaseAuditor):
         })
     """
 
-    def __init__(self) -> None:
-        """Initialize cross-reference auditor."""
+    def __init__(
+        self,
+        codebert_client: CodeBERTClientProtocol | None = None,
+    ) -> None:
+        """Initialize cross-reference auditor.
+
+        Args:
+            codebert_client: CodeBERT client for embeddings (uses FakeCodeBERTClient if None)
+        """
         self._extractor = CodeExtractor()
-        self._embedder = FakeCodeBERTEmbedder()
-        self._scorer = CodeSimilarityScorer(embedder=self._embedder)
+
+        # AC-5.2.1: Use injected client or default to FakeCodeBERTClient
+        if codebert_client is None:
+            from src.clients.codebert_client import FakeCodeBERTClient
+            codebert_client = FakeCodeBERTClient()
+
+        self._codebert_client = codebert_client
+        self._scorer = CodeSimilarityScorer()
 
     @property
     def name(self) -> str:
@@ -167,7 +185,7 @@ class CrossReferenceAuditor(BaseAuditor):
                 is_theory_impl = self._detect_theory_impl_relationship(
                     block.context_before, block.code
                 )
-                
+
                 all_reference_codes.append({
                     "chapter_id": chapter_id,
                     "title": title,
@@ -175,7 +193,7 @@ class CrossReferenceAuditor(BaseAuditor):
                     "start_line": block.start_line,
                     "is_theory_impl": is_theory_impl,
                 })
-                
+
                 if is_theory_impl:
                     theory_impl_relationships.append({
                         "chapter_id": chapter_id,
@@ -196,7 +214,7 @@ class CrossReferenceAuditor(BaseAuditor):
 
         for ref_code in all_reference_codes:
             similarity = self._scorer.calculate_similarity(code, ref_code["code"])
-            
+
             finding: dict[str, Any] = {
                 "chapter_id": ref_code["chapter_id"],
                 "title": ref_code["title"],
@@ -220,10 +238,7 @@ class CrossReferenceAuditor(BaseAuditor):
 
         # AC-5.4.4: Determine status based on similarity
         passed = best_similarity >= threshold
-        if passed:
-            status = AuditStatus.VERIFIED
-        else:
-            status = AuditStatus.SUSPICIOUS
+        status = AuditStatus.VERIFIED if passed else AuditStatus.SUSPICIOUS
 
         return AuditResult(
             passed=passed,
