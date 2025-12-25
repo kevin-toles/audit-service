@@ -14,9 +14,9 @@ services:
       - AUDIT_DEBUG=true
       - AUDIT_LOG_LEVEL=DEBUG
       - AUDIT_LOG_FORMAT=text
-      - AUDIT_LLM_GATEWAY_URL=http://llm-gateway:8081
-      - AUDIT_SEMANTIC_SEARCH_URL=http://semantic-search:8082
-      - AUDIT_AI_PLATFORM_DATA_URL=http://ai-platform-data:8083
+      - AUDIT_LLM_GATEWAY_URL=http://llm-gateway:8080
+      - AUDIT_CODE_ORCHESTRATOR_URL=http://code-orchestrator-service:8083
+      - AUDIT_SEMANTIC_SEARCH_URL=http://semantic-search-service:8084
     volumes:
       - ../../src:/app/src:ro
       - ../../config:/app/config:ro
