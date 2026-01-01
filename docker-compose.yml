@@ -1,0 +1,48 @@
+# ==============================================================================
+# Audit Service - Docker Compose
+# ==============================================================================
+# Role: AUDITOR - Anti-pattern detection, compliance validation
+# Port: 8084
+# Reference: ai-platform-data/docs/NETWORK_ARCHITECTURE.md
+# ==============================================================================
+
+services:
+  audit-service:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile
+    container_name: audit-service
+    ports:
+      - "8084:8084"
+    environment:
+      - AUDIT_SERVICE_HOST=0.0.0.0
+      - AUDIT_SERVICE_PORT=8084
+      - AUDIT_SERVICE_LOG_LEVEL=INFO
+      - PYTHONUNBUFFERED=1
+      # Kitchen Brigade dependencies (container names on ai-platform-network)
+      - SEMANTIC_SEARCH_URL=http://semantic-search-service:8081
+      - CODE_ORCHESTRATOR_URL=http://code-orchestrator-service:8083
+      # Inference service (native on host for Metal, or Docker when toggled)
+      - INFERENCE_SERVICE_URL=http://host.docker.internal:8085
+    volumes:
+      - ./config:/app/config:ro
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8084/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - ai-platform-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+# ==============================================================================
+# Networks - Tiered network architecture
+# ==============================================================================
+networks:
+  ai-platform-network:
+    name: ai-platform-network
+    external: true
