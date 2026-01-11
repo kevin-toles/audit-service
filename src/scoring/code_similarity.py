@@ -21,6 +21,8 @@ Anti-Patterns Avoided:
 
 from __future__ import annotations
 
+import os
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -36,6 +38,36 @@ if TYPE_CHECKING:
 # =============================================================================
 
 _DEFAULT_THRESHOLD = 0.7  # Default similarity threshold
+_CODE_ORCHESTRATOR_URL = os.getenv(
+    "CODE_ORCHESTRATOR_URL", "http://localhost:8083"
+)
+
+
+@lru_cache(maxsize=1)
+def _get_embedder_mode() -> str:
+    """Get embedder mode from environment (cached)."""
+    return os.getenv("CODEBERT_CLIENT_MODE", "fake")
+
+
+def get_default_embedder() -> "CodeBERTEmbedderProtocol":
+    """Get default embedder based on environment.
+    
+    Uses CODEBERT_CLIENT_MODE environment variable:
+    - "real": Use CodeBERTEmbedder (HTTP calls to Code-Orchestrator)
+    - "fake": Use FakeCodeBERTEmbedder (hash-based, for testing)
+    
+    Returns:
+        CodeBERTEmbedderProtocol implementation
+    """
+    from src.embedders.codebert_embedder import (
+        CodeBERTEmbedder,
+        FakeCodeBERTEmbedder,
+    )
+    
+    mode = _get_embedder_mode()
+    if mode == "real":
+        return CodeBERTEmbedder(service_url=_CODE_ORCHESTRATOR_URL)
+    return FakeCodeBERTEmbedder()
 
 
 # =============================================================================
@@ -89,14 +121,12 @@ class CodeSimilarityScorer:
         """Initialize similarity scorer.
 
         Args:
-            embedder: CodeBERT embedder instance (uses default if None)
+            embedder: CodeBERT embedder instance (uses get_default_embedder() if None)
             threshold: Similarity threshold for is_similar() (0.0-1.0)
         """
         if embedder is None:
-            # Create default embedder
-            from src.embedders.codebert_embedder import FakeCodeBERTEmbedder
-
-            embedder = FakeCodeBERTEmbedder()
+            # Use environment-based default embedder
+            embedder = get_default_embedder()
 
         self._embedder = embedder
         self._threshold = threshold

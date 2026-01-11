@@ -212,17 +212,17 @@ class FakeCodeBERTEmbedder:
 
 
 # =============================================================================
-# Real Implementation (placeholder for production)
+# Real Implementation - Calls Code-Orchestrator-Service
 # =============================================================================
 
 
 class CodeBERTEmbedder:
-    """Production CodeBERT embedder.
+    """Production CodeBERT embedder calling Code-Orchestrator-Service.
 
-    In production, this would call Code-Orchestrator-Service
-    or load the CodeBERT model directly.
-
-    For now, delegates to FakeCodeBERTEmbedder.
+    FIX (2026-01-10): Now actually calls Code-Orchestrator HTTP API
+    instead of delegating to FakeCodeBERTEmbedder.
+    
+    Uses synchronous requests (httpx) to match the sync Protocol interface.
     """
 
     def __init__(
@@ -233,25 +233,31 @@ class CodeBERTEmbedder:
         """Initialize CodeBERT embedder.
 
         Args:
-            service_url: URL for Code-Orchestrator-Service (optional)
-            enable_cache: Whether to cache embeddings
+            service_url: URL for Code-Orchestrator-Service (default: localhost:8083)
+            enable_cache: Whether to cache embeddings locally
         """
-        self._service_url = service_url
+        self._service_url = service_url or "http://localhost:8083"
         self._cache_enabled = enable_cache
-        # For now, use fake implementation
-        self._fake = FakeCodeBERTEmbedder(enable_cache=enable_cache)
+        self._cache: dict[str, npt.NDArray[np.floating[Any]]] = {}
+        
+        # Import httpx for sync HTTP calls
+        try:
+            import httpx
+            self._httpx = httpx
+        except ImportError:
+            self._httpx = None
 
     @property
     def cache_size(self) -> int:
         """Return number of cached embeddings."""
-        return self._fake.cache_size
+        return len(self._cache)
 
     def clear_cache(self) -> None:
         """Clear all cached embeddings."""
-        self._fake.clear_cache()
+        self._cache.clear()
 
     def get_embedding(self, code: str) -> npt.NDArray[np.floating[Any]]:
-        """Generate embedding for code string.
+        """Generate embedding via Code-Orchestrator-Service.
 
         Args:
             code: Source code to embed
@@ -259,8 +265,43 @@ class CodeBERTEmbedder:
         Returns:
             768-dimensional normalized embedding
         """
-        # TODO: In production, call Code-Orchestrator-Service
-        return self._fake.get_embedding(code)
+        # Handle empty input
+        code_stripped = code.strip()
+        if not code_stripped:
+            return np.zeros(_EMBEDDING_DIM, dtype=np.float32)
+        
+        # Check cache
+        if self._cache_enabled and code in self._cache:
+            return self._cache[code]
+        
+        # Call Code-Orchestrator API
+        if self._httpx is None:
+            raise RuntimeError("httpx not installed - required for real CodeBERT embeddings")
+        
+        try:
+            response = self._httpx.post(
+                f"{self._service_url}/api/v1/codebert/embed",
+                json={"code": code},
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            
+            data = response.json()
+            embedding = np.array(data["embedding"], dtype=np.float32)
+            
+            # Cache if enabled
+            if self._cache_enabled:
+                self._cache[code] = embedding
+            
+            return embedding
+            
+        except Exception as e:
+            # Log error and return zero embedding on failure
+            import logging
+            logging.getLogger(__name__).warning(
+                f"CodeBERT embedding failed, returning zeros: {e}"
+            )
+            return np.zeros(_EMBEDDING_DIM, dtype=np.float32)
 
     def get_embeddings_batch(
         self, codes: list[str]
@@ -273,7 +314,29 @@ class CodeBERTEmbedder:
         Returns:
             List of 768-dimensional normalized embeddings
         """
-        return self._fake.get_embeddings_batch(codes)
+        if not codes:
+            return []
+        
+        # Try batch API first
+        if self._httpx is not None:
+            try:
+                response = self._httpx.post(
+                    f"{self._service_url}/api/v1/codebert/embed/batch",
+                    json={"codes": codes},
+                    timeout=60.0,
+                )
+                response.raise_for_status()
+                
+                data = response.json()
+                return [
+                    np.array(emb, dtype=np.float32)
+                    for emb in data["embeddings"]
+                ]
+            except Exception:
+                pass  # Fall back to individual calls
+        
+        # Fallback: call get_embedding for each
+        return [self.get_embedding(code) for code in codes]
 
     def embed_code_block(
         self, block: "CodeBlock"
@@ -286,7 +349,7 @@ class CodeBERTEmbedder:
         Returns:
             768-dimensional normalized embedding
         """
-        return self._fake.embed_code_block(block)
+        return self.get_embedding(block.code)
 
     def embed_code_blocks(
         self, blocks: list["CodeBlock"]
@@ -299,4 +362,4 @@ class CodeBERTEmbedder:
         Returns:
             List of 768-dimensional normalized embeddings
         """
-        return self._fake.embed_code_blocks(blocks)
+        return self.get_embeddings_batch([b.code for b in blocks])

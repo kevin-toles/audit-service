@@ -22,15 +22,43 @@ Anti-Patterns Avoided:
 
 from __future__ import annotations
 
+import os
 import re
+from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 from src.auditors.base import AuditResult, AuditStatus, BaseAuditor
 from src.extractors.code_extractor import CodeExtractor
-from src.scoring.code_similarity import CodeSimilarityScorer
 
 if TYPE_CHECKING:
     from src.clients.codebert_client import CodeBERTClientProtocol
+
+
+# =============================================================================
+# Environment-Based Client Factory
+# =============================================================================
+
+_CODE_ORCHESTRATOR_URL = os.getenv("CODE_ORCHESTRATOR_URL", "http://localhost:8083")
+
+
+@lru_cache(maxsize=1)
+def _get_client_mode() -> str:
+    """Get client mode from environment (cached)."""
+    return os.getenv("CODEBERT_CLIENT_MODE", "fake")
+
+
+def _get_default_codebert_client() -> "CodeBERTClientProtocol":
+    """Get CodeBERT client based on CODEBERT_CLIENT_MODE env var.
+    
+    Returns:
+        CodeBERTClient (real) or FakeCodeBERTClient based on env.
+    """
+    from src.clients.codebert_client import CodeBERTClient, FakeCodeBERTClient
+    
+    mode = _get_client_mode()
+    if mode == "real":
+        return CodeBERTClient(base_url=_CODE_ORCHESTRATOR_URL)
+    return FakeCodeBERTClient()
 
 
 # =============================================================================
@@ -99,7 +127,7 @@ class CrossReferenceAuditor(BaseAuditor):
     Pattern: Inherits from BaseAuditor (AC-5.4.1)
 
     AC-5.2.1: Accepts CodeBERTClientProtocol for dependency injection.
-    Uses FakeCodeBERTClient by default for testability.
+    Uses CODEBERT_CLIENT_MODE env var to select real/fake when no client injected.
 
     Usage:
         auditor = CrossReferenceAuditor()
@@ -118,17 +146,17 @@ class CrossReferenceAuditor(BaseAuditor):
         """Initialize cross-reference auditor.
 
         Args:
-            codebert_client: CodeBERT client for embeddings (uses FakeCodeBERTClient if None)
+            codebert_client: CodeBERT client for embeddings (uses env-based default if None)
         """
         self._extractor = CodeExtractor()
 
-        # AC-5.2.1: Use injected client or default to FakeCodeBERTClient
+        # AC-5.2.1: Use injected client or environment-based default
         if codebert_client is None:
-            from src.clients.codebert_client import FakeCodeBERTClient
-            codebert_client = FakeCodeBERTClient()
+            codebert_client = _get_default_codebert_client()
 
         self._codebert_client = codebert_client
-        self._scorer = CodeSimilarityScorer()
+        # Note: Using _codebert_client.calculate_similarity() directly
+        # instead of CodeSimilarityScorer which has its own embedded embedder
 
     @property
     def name(self) -> str:
@@ -213,7 +241,10 @@ class CrossReferenceAuditor(BaseAuditor):
         best_similarity = 0.0
 
         for ref_code in all_reference_codes:
-            similarity = self._scorer.calculate_similarity(code, ref_code["code"])
+            # Use injected CodeBERT client for similarity (not self._scorer!)
+            similarity = await self._codebert_client.calculate_similarity(
+                code, ref_code["code"]
+            )
 
             finding: dict[str, Any] = {
                 "chapter_id": ref_code["chapter_id"],
